@@ -105,6 +105,14 @@ h1, h2, h3, h4, h5, h6, p, div {
 div.element-container:nth-child(n) .stDataFrame div {
     background-color: rgba(0,0,0,0);  /* table cells transparent */
 }
+            
+
+/* Left-align metric text */
+[data-testid="stMetric"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+}
 
 </style>
 """, unsafe_allow_html=True)
