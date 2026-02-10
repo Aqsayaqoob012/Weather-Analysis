@@ -133,10 +133,15 @@ st.title("Weather Dashboard")
 # CACHE (Makes app faster)
 # -------------------------
 @st.cache_data(ttl=3600)
-def get_forecast(city):
 
+
+def get_forecast(city):
     geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
     geo = requests.get(geo_url).json()
+
+    if not geo:  # ✅ check if list is empty
+        st.error(f"City '{city}' not found or API error.")
+        return pd.DataFrame()  # return empty DataFrame to avoid crash
 
     lat = geo[0]["lat"]
     lon = geo[0]["lon"]
@@ -144,19 +149,19 @@ def get_forecast(city):
     forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
     forecast = requests.get(forecast_url).json()
 
-    df = pd.DataFrame(forecast["list"])
+    if forecast.get("cod") != "200":
+        st.error(f"Forecast API error for {city}")
+        return pd.DataFrame()
 
+    df = pd.DataFrame(forecast["list"])
     df["date"] = pd.to_datetime(df["dt_txt"])
     df["temp"] = df["main"].apply(lambda x: x["temp"])
     df["humidity"] = df["main"].apply(lambda x: x["humidity"])
     df["wind"] = df["wind"].apply(lambda x: x["speed"])
-    df["icon"] = df["weather"].apply(lambda x: x[0]["icon"])   # ⭐ NEW
-    df["description"] = df["weather"].apply(lambda x: x[0]["main"])  # ⭐ NEW
     df["city"] = city
-    df["lat"] = lat
-    df["lon"] = lon
 
-    return df[["date","temp","humidity","wind","city","lat","lon","icon","description"]]
+    return df[["date", "temp", "humidity", "wind", "city"]]
+
 
 
 # -------------------------
