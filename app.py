@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 
+print(os.getenv("API_KEY"))
+
 
 st.markdown("""
 <style>
