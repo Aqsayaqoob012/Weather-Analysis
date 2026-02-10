@@ -172,15 +172,24 @@ data = pd.concat([get_forecast(city) for city in cities])
 # -------------------------
 # METRICS (Top cards)
 # -------------------------
+# -------------------------
+# METRICS (Top cards)
+# -------------------------
 st.subheader(" Current Snapshot")
 
 cols = st.columns(4)
 
 for col, city in zip(cols, cities):
-
     latest = data[data["city"]==city].iloc[0]
 
-    icon_code = latest["icon"]
+    # ✅ Safe weather icon & description handling
+    if 'weather' in latest and len(latest['weather']) > 0:
+        icon_code = latest['weather'][0].get('icon', '01d')  # default sunny icon
+        description = latest['weather'][0].get('description', 'N/A')
+    else:
+        icon_code = '01d'
+        description = 'N/A'
+
     icon_url = f"http://openweathermap.org/img/wn/{icon_code}@2x.png"
 
     card_html = f"""
@@ -189,11 +198,12 @@ for col, city in zip(cols, cities):
         <img src="{icon_url}" width="90">
         <h2>{latest['temp']}°C</h2>
         <p>💧 Humidity: {latest['humidity']}%</p>
-        <p>{latest['description']}</p>
+        <p>{description}</p>
     </div>
     """
 
     col.markdown(card_html, unsafe_allow_html=True)
+
 
 
 
