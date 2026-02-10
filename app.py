@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 
-print(os.getenv("API_KEY"))
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
+print("API_KEY loaded:", API_KEY)
 
 
 st.markdown("""
@@ -136,7 +138,8 @@ st.title("Weather Dashboard")
 # -------------------------
 @st.cache_data(ttl=3600)
 def get_forecast(city):
-    geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
+    city = city.strip() 
+    geo_url = f"https://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
     geo = requests.get(geo_url).json()
 
     # 🔹 Safe check
