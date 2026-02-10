@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 
-API_KEY = st.secrets["API_KEY"]
+API_KEY = st.secrets["general"]["API_KEY"]
 
 st.markdown("""
 <style>
