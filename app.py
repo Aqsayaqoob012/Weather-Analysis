@@ -6,10 +6,7 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 
-load_dotenv()
-API_KEY = os.getenv("API_KEY")
-print("API_KEY loaded:", API_KEY)
-
+API_KEY = st.secrets["API_KEY"]
 
 st.markdown("""
 <style>
@@ -126,8 +123,7 @@ div.element-container:nth-child(n) .stDataFrame div {
 # -------------------------
 st.set_page_config(page_title="Weather Dashboard", layout="wide")
 
-load_dotenv()
-API_KEY = os.getenv("API_KEY")
+
 
 cities = ["Karachi", "Lahore", "Islamabad", "Multan"]
 
