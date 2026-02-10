@@ -1,29 +1,11 @@
-from vega_datasets import data
 import streamlit as st
+import requests
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.express as px
+from dotenv import load_dotenv
+import os
+import numpy as np
 
-df = data.seattle_weather()
-print(df.head())
-
-
-
-# Convert 'date' to datetime
-df['date'] = pd.to_datetime(df['date'])
-
-# Filter for year 2012 (replace 2012 with 2025 if you have that data)
-year = 2012
-df_year = df[df['date'].dt.year == year]
-
-# Compute summary metrics
-max_temp = df_year['temp_max'].max()
-min_temp = df_year['temp_min'].min()
-max_precip = df_year['precipitation'].max()
-min_precip = df_year['precipitation'].min()
-max_wind = df_year['wind'].max()
-min_wind = df_year['wind'].min()
-most_common_weather = df_year['weather'].mode()[0]
-least_common_weather = df_year['weather'].value_counts().idxmin()
 
 st.markdown("""
 <style>
@@ -50,22 +32,40 @@ h1, h2, h3, h4, h5, h6, p, div {
     color: #7D1A61;
 }
 
-/* Animated Metric Cards */
-[data-testid="stMetric"] {
-    border: 2px solid #12080A;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 2px 5px 10px #7D1A2F;
+
+.weather-card {
+    border: 3px solid #7D1A2F;
+    border-radius: 18px;
+    padding: 20px;
+    text-align: center;
 
     background: linear-gradient(-45deg, #FCE1E7, #E3F2FD, #E8F5E9, #FFF3E0);
-    background-size: 300% 300%;
-    animation: metricBG 6s ease infinite;
+    background-size: 400% 400%;
+    animation: gradientMove 8s ease infinite;
+
+    box-shadow: 0 5px 20px #7D1A2F;
+    transition: 0.4s;
 }
 
-@keyframes metricBG {
+/* Hover effect 🔥 */
+.weather-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px #7D1A2F;
+}
+
+@keyframes gradientMove {
     0% {background-position: 0% 50%;}
     50% {background-position: 100% 50%;}
     100% {background-position: 0% 50%;}
+}
+            
+
+   .graph-box {
+    border: 3px solid #7D1A2F;
+    border-radius: 12px;
+    padding: 0px; /* remove inner padding so border hugs graph */
+    overflow: hidden; /* ensures graph doesn't overflow border */
+    margin-bottom: 20px; /* space between graphs */
 }
 
 /* Main Heading */
@@ -117,292 +117,331 @@ div.element-container:nth-child(n) .stDataFrame div {
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------------
+# CONFIG
+# -------------------------
+st.set_page_config(page_title="Weather Dashboard", layout="wide")
+
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
+
+cities = ["Karachi", "Lahore", "Islamabad", "Multan"]
+
+st.title("Weather Dashboard")
+
+# -------------------------
+# CACHE (Makes app faster)
+# -------------------------
+@st.cache_data(ttl=3600)
+def get_forecast(city):
+
+    geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
+    geo = requests.get(geo_url).json()
+
+    lat = geo[0]["lat"]
+    lon = geo[0]["lon"]
+
+    forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
+    forecast = requests.get(forecast_url).json()
+
+    df = pd.DataFrame(forecast["list"])
+
+    df["date"] = pd.to_datetime(df["dt_txt"])
+    df["temp"] = df["main"].apply(lambda x: x["temp"])
+    df["humidity"] = df["main"].apply(lambda x: x["humidity"])
+    df["wind"] = df["wind"].apply(lambda x: x["speed"])
+    df["icon"] = df["weather"].apply(lambda x: x[0]["icon"])   # ⭐ NEW
+    df["description"] = df["weather"].apply(lambda x: x[0]["main"])  # ⭐ NEW
+    df["city"] = city
+    df["lat"] = lat
+    df["lon"] = lon
+
+    return df[["date","temp","humidity","wind","city","lat","lon","icon","description"]]
 
 
-# -------- Your UI --------
-st.title("Weather Data Analysis")
-st.header(f"{year} Summary")
+# -------------------------
+# LOAD DATA
+# -------------------------
+data = pd.concat([get_forecast(city) for city in cities])
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Max Temperature (°C)", max_temp)
-col2.metric("Min Temperature (°C)", min_temp)
-col3.metric("Max Precipitation (mm)", max_precip)
-col4.metric("Min Precipitation (mm)", min_precip)
+# -------------------------
+# METRICS (Top cards)
+# -------------------------
+st.subheader(" Current Snapshot")
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Max Wind (km/h)", max_wind)
-col2.metric("Min Wind (km/h)", min_wind)
-col3.metric("Most Common Weather", most_common_weather)
-col4.metric("Least Common Weather", least_common_weather)
+cols = st.columns(4)
 
+for col, city in zip(cols, cities):
 
-# ---------- Headings ----------
-st.markdown('<div class="compare-heading">Compare Different Years</div>', unsafe_allow_html=True)
+    latest = data[data["city"]==city].iloc[0]
 
-st.markdown('<div class="small-heading">Years to Compare</div>', unsafe_allow_html=True)
+    icon_code = latest["icon"]
+    icon_url = f"http://openweathermap.org/img/wn/{icon_code}@2x.png"
 
+    card_html = f"""
+    <div class="weather-card">
+        <h3>{city}</h3>
+        <img src="{icon_url}" width="90">
+        <h2>{latest['temp']}°C</h2>
+        <p>💧 Humidity: {latest['humidity']}%</p>
+        <p>{latest['description']}</p>
+    </div>
+    """
 
-# ---------- Rounded Years Box ----------
-st.markdown("""
-<div class="year-box">
-    <div class="year">2012</div>
-    <div class="year">2013</div>
-    <div class="year">2014</div>
-    <div class="year">2015</div>
-</div>
-""", unsafe_allow_html=True)
+    col.markdown(card_html, unsafe_allow_html=True)
 
 
 
- #Convert date
-df['date'] = pd.to_datetime(df['date'])
-df['year'] = df['date'].dt.year
-df['month'] = df['date'].dt.strftime('%b')
+# -------------------------
+# GRAPHS
+# -------------------------
 
-# Monthly average temperature
-df = df.drop_duplicates()  # duplicate rows remove
-monthly_temp = df.groupby(['year','month'])['temp_max'].mean().unstack(0)
+# Temperature Trend
+st.subheader("🌡 Temperature Trend")
 
-# Fix months order
-months_order = ["Jan","Feb","Mar","Apr","May","Jun",
-                "Jul","Aug","Sep","Oct","Nov","Dec"]
-monthly_temp = monthly_temp.reindex(months_order)
-
-# -------- Plot --------
-st.markdown('<div class="compare-heading">Temperature</div>', unsafe_allow_html=True)
-fig, ax = plt.subplots(figsize=(10,5))
-
-for year in monthly_temp.columns:
-    ax.plot(monthly_temp.index, monthly_temp[year], marker='o', label=year)
-
-# Transparent background
-fig.patch.set_alpha(0)  # Figure background
-ax.set_facecolor("none")  # Axes background transparent
-
-# Labels & grid
-ax.set_xlabel("Months")
-ax.set_ylabel("Temperature (°C)")
-ax.set_title("Temperature Comparison Across Years")
-ax.grid(True, alpha=0.3)
-
-# Legend
-ax.legend(title="Years")
-
-# Top margin (gap) for Streamlit
-st.markdown("<div style='margin-top: 30px'></div>", unsafe_allow_html=True)
-
-st.pyplot(fig)
-
-
-# Remove duplicates if any
-df = df.drop_duplicates()
-
-# Count of each weather type
-weather_counts = df['weather'].value_counts()
-
-colors = {
-    'drizzle': '#4DB6AC',   # teal
-    'fog': '#90A4AE',       # steel grey
-    'rain': '#1E88E5',      # bright blue
-    'snow': '#81D4FA',      # light sky blue
-    'sunny': "#E8E40D",     # golden yellow
-    'cloudy': "#F11EB6"     # magenta/pink
-}
-
-# Map colors for only available weather types
-color_list = [colors[w] if w in colors else "#E8E40D" for w in weather_counts.index]
-
-# ---------- Plot Pie Chart ----------
-st.markdown('<div class="compare-heading">Weather Distribution</div>', unsafe_allow_html=True)
-fig, ax = plt.subplots(figsize=(6,6))
-
-# Transparent background
-fig.patch.set_alpha(0)
-ax.set_facecolor("none")
-
-# Pie chart
-wedges, texts, autotexts = ax.pie(
-    weather_counts, 
-    labels=weather_counts.index,
-    autopct='%1.1f%%',
-    startangle=90,
-    colors=color_list,
-    wedgeprops={'edgecolor':'black','linewidth':1.2}
+fig1 = px.line(
+    data,
+    x="date",
+    y="temp",
+    color="city",
+    markers=True
 )
 
-# Improve text visibility
-for t in texts + autotexts:
-    t.set_color('black')
-    t.set_fontsize(10)
-
-
-# Legend outside on right
-ax.legend(
-    wedges,
-    weather_counts.index,
-    title="Weather Type",
-    loc="center left",
-    bbox_to_anchor=(1,0,0.5,1)
+fig1.update_layout(
+    plot_bgcolor="rgba(0,0,0,0)",  # transparent
+    paper_bgcolor="rgba(0,0,0,0)"  # transparent
 )
 
-st.pyplot(fig)
+st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+st.plotly_chart(fig1, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ---------- 1) Line Graph: Average Wind over Past Two Weeks ----------
-# Sample: last 14 days data
-
-# ---------- Create month_day column ----------
-df['month_day'] = df['date'].dt.strftime('%b %d')  # e.g., Jan 01, Mar 01
-
-# ---------- Define years to show ----------
-years_to_show = [2012, 2013, 2014, 2015]
-
-# ---------- Colors for each year ----------
-year_colors = {
-    2012: '#4DB6AC',  # teal
-    2013: '#1E88E5',  # blue
-    2014: '#FFD700',  # yellow
-    2015: '#F11EB6'   # pink/magenta
-}
-
-# ---------- Sample X-axis points (specific dates) ----------
-x_dates = ['Jan 01', 'Mar 01', 'May 01', 'Jul 01', 'Sep 01', 'Nov 01']
-
-st.markdown('<div class="compare-heading">Wind</div>', unsafe_allow_html=True)
-fig, ax = plt.subplots(figsize=(10,5))
-fig.patch.set_alpha(0)
-ax.set_facecolor("none")
-
-# Plot lines for each year
-for year in years_to_show:
-    df_year = df[df['year'] == year]
-    
-    # Select only x_dates
-    df_year = df_year[df_year['month_day'].isin(x_dates)]
-    
-    # Sort by date
-    df_year = df_year.sort_values('date')
-    
-    # Plot
-    ax.plot(df_year['month_day'], df_year['wind'], marker='o', label=str(year), color=year_colors[year])
-
-# Labels and grid
-ax.set_xlabel("Date")
-ax.set_ylabel("Wind (km/h)")
-ax.set_title("Wind Comparison Across Years")
-ax.grid(True, alpha=0.3)
-ax.legend(title="Year")
-
-st.markdown("<div style='margin-top:30px'></div>", unsafe_allow_html=True)
-st.pyplot(fig)
+# Humidity + Wind Side by Side
 
 
-# ---------- 2) Bar Chart: Monthly Precipitation per Year ----------
+col1, col2 = st.columns(2)
 
-# ---------- Monthly precipitation per year ----------
-monthly_precip = df.groupby(['month','year'])['precipitation'].sum().unstack(1)
+# -------------------------
+# Humidity Comparison
+# -------------------------
+with col1:
+    st.subheader("💧 Humidity Comparison")
+    fig2 = px.line(
+        data,
+        x="date",
+        y="humidity",
+        color="city",
+        markers=True  # ✅ dots on line
+    )
+    # Mota line aur transparent background
+    fig2.update_traces(line=dict(width=4))  # ✅ line thickness
+    fig2.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
 
-# Fix month order
-months_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-monthly_precip = monthly_precip.reindex(months_order)
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig2, use_container_width=True, key="humidity_line")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------- Colors per year ----------
-year_colors = {
-     2012: '#76C7C0',  # turquoise
-    2013: "#E2756B",  # coral / reddish
-    2014: "#E59A29",  # golden yellow
-    2015: "#9F7AAF"   # purple
-}
+# -------------------------
+# Wind Speed
+# -------------------------
+with col2:
+    st.subheader("🌬 Wind Speed")
+    fig3 = px.line(
+        data,
+        x="date",
+        y="wind",
+        color="city",
+        markers=True  # ✅ dots on line
+    )
+    fig3.update_traces(line=dict(width=4))  # ✅ line thickness
+    fig3.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
 
-# ---------- Plot ----------
-
-st.markdown('<div class="compare-heading">Precipitation</div>', unsafe_allow_html=True)
-fig, ax = plt.subplots(figsize=(12,6))
-fig.patch.set_alpha(0)
-ax.set_facecolor("none")
-
-bottom = [0]*len(months_order)  # start from 0 for stacking
-
-for year in monthly_precip.columns:
-    ax.bar(months_order, monthly_precip[year], bottom=bottom, color=year_colors[year], label=str(year))
-    # Update bottom for next stack
-    bottom = [i+j for i,j in zip(bottom, monthly_precip[year])]
-
-ax.set_xlabel("Months")
-ax.set_ylabel("Precipitation (mm)")
-ax.set_title("Monthly Precipitation per Year (Stacked)")
-ax.legend(title="Year")
-ax.grid(True, alpha=0.3)
-
-st.pyplot(fig)
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig3, use_container_width=True, key="wind_line")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
+st.subheader("📊 Weather Overview Charts")
 
-# ---------- Monthly counts per weather ----------
-weather_types = ['drizzle', 'fog', 'rain', 'snow' , 'sun']  # select types to show
-monthly_weather = df.groupby(['month','weather']).size().unstack(fill_value=0)
-monthly_weather = monthly_weather[weather_types]  # only selected types
+col1, col2 = st.columns(2)
 
-# Fix month order
-months_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-monthly_weather = monthly_weather.reindex(months_order)
+# ------------------------- 
+# 1️⃣ Pie Chart — Avg Temperature
+# -------------------------
+with col1:
+    avg_temp = data.groupby("city")["temp"].mean().reset_index()
 
-# ---------- Colors for each weather ----------
-weather_colors = {
-    'drizzle': '#76C7C0',  # turquoise
-    'fog':     "#9F7AAF" ,  # purple
-    'rain': "#E59A29",     # blue
-    'snow': '#FFD700' ,    # yellow
-    'sun' : "#E2756B"
-}
+    fig_pie = px.pie(
+        avg_temp,
+        names="city",
+        values="temp",
+        title="🌡 Average Temperature",
+        color="city",
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
 
-# ---------- Plot ----------
+    fig_pie.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
 
-st.markdown('<div class="compare-heading">Monthly Weather Breakdown</div>', unsafe_allow_html=True)
-fig, ax = plt.subplots(figsize=(12,6))
-fig.patch.set_alpha(0)
-ax.set_facecolor("none")
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig_pie, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-bottom = [0]*len(months_order)
+# ------------------------- 
+# 2️⃣ Bar Chart — Avg Humidity
+# -------------------------
+with col2:
+    avg_humidity = data.groupby("city")["humidity"].mean().reset_index()
 
-for weather in weather_types:
-    ax.bar(months_order, monthly_weather[weather], bottom=bottom, color=weather_colors[weather], label=weather)
-    # Update bottom for stacking
-    bottom = [i+j for i,j in zip(bottom, monthly_weather[weather])]
+    fig_bar = px.bar(
+        avg_humidity,
+        x="city",
+        y="humidity",
+        title="💧 Average Humidity",
+        color="city",
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
 
-ax.set_xlabel("Months")
-ax.set_ylabel("Number of Days")
-ax.set_title("Monthly Weather Breakdown")
-ax.legend(title="Weather Type")
-ax.grid(True, alpha=0.3)
+    fig_bar.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
 
-st.pyplot(fig)
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig_bar, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
-# ---------- Convert DataFrame to HTML ----------
-table_html = df.to_html(index=False)
-st.markdown('<div class="compare-heading">Raw Data</div>', unsafe_allow_html=True)
-# ---------- CSS + HTML for scrollable transparent box ----------
-st.markdown(f"""
-<div style="height:400px; overflow-y:scroll; overflow-x:hidden; background: rgba(0,0,0,0); padding:10px; border-radius:10px;">
-{table_html}
-</div>
-<style>
-table {{
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;  /* ensures table fits container width */
-    background: rgba(255,255,255,0.1);  /* slightly transparent white */
-}}
-th, td {{
-    border: 1px solid #ccc;
-    padding: 6px;
-    text-align: center;
-    word-wrap: break-word;  /* long text wraps inside cell */
-}}
-th {{
-    background-color: rgba(255,255,255,0.2);
-}}
-</style>
-""", unsafe_allow_html=True)
+st.subheader("🌡 Temp vs Humidity Scatter")
+
+fig_scatter = px.scatter(
+    data,
+    x="temp",
+    y="humidity",
+    color="city",
+    size="wind",           # wind speed ko point size me show kare
+    hover_data=["date"],
+    title="Temperature vs Humidity (Wind size)"
+)
+
+fig_scatter.update_layout(
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
+    margin=dict(l=20,r=20,t=50,b=20)
+)
+
+st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+st.plotly_chart(fig_scatter, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+
+
+st.subheader("🌡 Stacked Temperature Trend")
+
+fig_area = px.area(
+    data,
+    x="date",
+    y="temp",
+    color="city",
+    title="Stacked Temperature Trend by City"
+)
+
+fig_area.update_layout(
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
+    margin=dict(l=20,r=20,t=50,b=20)
+)
+
+st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+st.plotly_chart(fig_area, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+
+
+
+# Simulate wind direction for Polar chart
+data["wind_dir"] = np.random.randint(0,360,len(data))
+
+# -------------------------
+# 1️⃣ Scatter Plot — Full row
+# -------------------------
+st.subheader("🌡 Temp vs Humidity Scatter")
+
+fig_scatter = px.scatter(
+    data,
+    x="temp",
+    y="humidity",
+    color="city",
+    size="wind",
+    hover_data=["date"],
+    title="Temperature vs Humidity (Wind size)"
+)
+
+fig_scatter.update_layout(
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
+    margin=dict(l=20,r=20,t=50,b=20)
+)
+
+st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+st.plotly_chart(fig_scatter, use_container_width=True, key="scatter_plot")  # ✅ unique key
+st.markdown('</div>', unsafe_allow_html=True)
+
+
+# -------------------------
+# 2️⃣ Stacked Area + Polar Side by Side
+# -------------------------
+col1, col2 = st.columns([2,1])  # left side double width, right side smaller
+
+# Left: Stacked Area Chart
+with col1:
+    st.subheader("🌡 Stacked Temperature Trend")
+    fig_area = px.area(
+        data,
+        x="date",
+        y="temp",
+        color="city",
+        title="Stacked Temperature Trend by City"
+    )
+    fig_area.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20,r=20,t=50,b=20)
+    )
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig_area, use_container_width=True, key="area_plot")  # ✅ unique key
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Right: Polar Chart
+with col2:
+    st.subheader("🌬 Wind Speed & Direction")
+    fig_polar = px.line_polar(
+        data,
+        r="wind",
+        theta="wind_dir",
+        color="city",
+        line_close=True,
+        title="Wind Speed vs Direction"
+    )
+    fig_polar.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20,r=20,t=50,b=20)
+    )
+    st.markdown('<div class="graph-box">', unsafe_allow_html=True)
+    st.plotly_chart(fig_polar, use_container_width=True, key="polar_plot")  # ✅ unique key
+    st.markdown('</div>', unsafe_allow_html=True)
